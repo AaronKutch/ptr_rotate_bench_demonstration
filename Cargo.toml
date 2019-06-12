@@ -1,0 +1,10 @@
+[package]
+name = "rotate_bench"
+version = "0.0.0"
+authors = []
+edition = "2018"
+
+# this is a demonstration of the performance difference between my ptr_rotate design vs whatever
+# design the libcore you are compiling with is using
+
+[dependencies]
