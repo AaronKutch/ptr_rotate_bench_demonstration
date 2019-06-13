@@ -254,6 +254,9 @@ macro_rules! rotate_bench {
     };
 }
 
+#[derive(Clone)]
+struct Rgb(u8,u8,u8);
+
 #[cfg(test)]
 mod benches {
     use super::*;
@@ -291,7 +294,7 @@ mod benches {
     rotate_bench!(x1024s992_old, x1024s992_new, 1024, 992);
 
     #[bench]
-    fn all_old(b: &mut Bencher) {
+    fn usize_old(b: &mut Bencher) {
         let mut x = black_box(setup(32));
         b.iter(|| {
             for i in 0..x.len() {
@@ -302,7 +305,7 @@ mod benches {
     }
 
     #[bench]
-    fn all_new(b: &mut Bencher) {
+    fn usize_new(b: &mut Bencher) {
         let mut x = black_box(setup(32));
         b.iter(|| {
             for i in 0..x.len() {
@@ -313,8 +316,8 @@ mod benches {
     }
 
     #[bench]
-    fn enormous_32_old(b: &mut Bencher) {
-        let size = 16;
+    fn usize_32_old(b: &mut Bencher) {
+        let size = 32;
         let mut v: Vec<[usize; 32]> = Vec::with_capacity(size);
         for i in 0..size {
             v.push([
@@ -331,8 +334,8 @@ mod benches {
     }
 
     #[bench]
-    fn enormous_32_new(b: &mut Bencher) {
-        let size = 16;
+    fn usize_32_new(b: &mut Bencher) {
+        let size = 32;
         let mut v: Vec<[usize; 32]> = Vec::with_capacity(size);
         for i in 0..size {
             v.push([
@@ -351,8 +354,8 @@ mod benches {
     }
 
     #[bench]
-    fn enormous_33_old(b: &mut Bencher) {
-        let size = 16;
+    fn usize_33_old(b: &mut Bencher) {
+        let size = 32;
         let mut v: Vec<[usize; 33]> = Vec::with_capacity(size);
         for i in 0..size {
             v.push([
@@ -369,8 +372,8 @@ mod benches {
     }
 
     #[bench]
-    fn enormous_33_new(b: &mut Bencher) {
-        let size = 16;
+    fn usize_33_new(b: &mut Bencher) {
+        let size = 32;
         let mut v: Vec<[usize; 33]> = Vec::with_capacity(size);
         for i in 0..size {
             v.push([
@@ -389,8 +392,8 @@ mod benches {
     }
 
     #[bench]
-    fn enormous_4_old(b: &mut Bencher) {
-        let size = 16;
+    fn usize_4_old(b: &mut Bencher) {
+        let size = 32;
         let mut v: Vec<[usize; 4]> = Vec::with_capacity(size);
         for i in 0..size {
             v.push([i, 0, 0, 0]);
@@ -404,8 +407,8 @@ mod benches {
     }
 
     #[bench]
-    fn enormous_4_new(b: &mut Bencher) {
-        let size = 16;
+    fn usize_4_new(b: &mut Bencher) {
+        let size = 32;
         let mut v: Vec<[usize; 4]> = Vec::with_capacity(size);
         for i in 0..size {
             v.push([i, 0, 0, 0]);
@@ -421,8 +424,8 @@ mod benches {
     }
 
     #[bench]
-    fn tiny_old(b: &mut Bencher) {
-        let size = 31;
+    fn u8_old(b: &mut Bencher) {
+        let size = 32;
         let mut v: Vec<u8> = Vec::with_capacity(size);
         for i in 0..size {
             v.push(i as u8);
@@ -436,11 +439,43 @@ mod benches {
     }
 
     #[bench]
-    fn tiny_new(b: &mut Bencher) {
-        let size = 31;
+    fn u8_new(b: &mut Bencher) {
+        let size = 32;
         let mut v: Vec<u8> = Vec::with_capacity(size);
         for i in 0..size {
             v.push(i as u8);
+        }
+        b.iter(|| {
+            for s in 0..size {
+                unsafe {
+                    ptr_rotate(size - s, v[..].as_mut_ptr().add(size - s), s);
+                }
+            }
+            v.clone()
+        })
+    }
+
+    #[bench]
+    fn rgb_old(b: &mut Bencher) {
+        let size = 32;
+        let mut v: Vec<Rgb> = Vec::with_capacity(size);
+        for i in 0..size {
+            v.push(Rgb(i as u8, (i as u8).wrapping_add(7), (i as u8).wrapping_add(42)));
+        }
+        b.iter(|| {
+            for s in 0..size {
+                v[..].rotate_right(s);
+            }
+            v.clone()
+        })
+    }
+
+    #[bench]
+    fn rgb_new(b: &mut Bencher) {
+        let size = 32;
+        let mut v: Vec<Rgb> = Vec::with_capacity(size);
+        for i in 0..size {
+            v.push(Rgb(i as u8, (i as u8).wrapping_add(7), (i as u8).wrapping_add(42)));
         }
         b.iter(|| {
             for s in 0..size {
