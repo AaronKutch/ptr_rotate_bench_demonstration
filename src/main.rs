@@ -174,22 +174,30 @@ pub unsafe fn ptr_rotate<T>(mut left: usize, mut mid: *mut T, mut right: usize) 
 }
 
 // this is for direct inclusion into the slice test code
-/*#[test]
+/*
+#[test]
 fn brute_force_rotate_test() {
-    const N: usize = 300;
-    for len in 0..N {
+    // In case of edge cases involving multiple algorithms
+    #[cfg(not(miri))]
+    let n = 300;
+    // `ptr_rotate` covers so many kinds of pointer usage,
+    // that this is just a good test for pointers in general
+    #[cfg(miri)]
+    let n = 30;
+    for len in 0..n {
         for s in 0..len {
             let mut v = Vec::with_capacity(len);
             for i in 0..len {
                 v.push(i);
             }
-            rotate_right(v[..], s);
+            v[..].rotate_right(s);
             for i in 0..v.len() {
                 assert_eq!(v[i], v.len().wrapping_add(i.wrapping_sub(s)) % v.len());
             }
         }
     }
-}*/
+}
+*/
 
 pub fn rotate_right(x: &mut [usize], k: usize) {
     assert!(k <= x.len());
@@ -239,7 +247,7 @@ macro_rules! rotate_bench {
             let mut x = black_box(setup($len));
             b.iter(|| {
                 x[..].rotate_right($s);
-                x.clone()
+                black_box(x[0].clone())
             })
         }
 
@@ -248,10 +256,36 @@ macro_rules! rotate_bench {
             let mut x = black_box(setup($len));
             b.iter(|| {
                 rotate_right(&mut x[..], $s);
-                x.clone()
+                black_box(x[0].clone())
             })
         }
     };
+}
+
+macro_rules! rotate {
+    ($fn_old:ident, $fn_new:ident, $n:expr, $mapper:expr) => {
+        #[bench]
+        fn $fn_old(b: &mut Bencher) {
+            let mut x = (0usize..$n).map(&$mapper).collect::<Vec<_>>();
+            b.iter(|| {
+                for s in 0..x.len() {
+                    x[..].rotate_right(s);
+                }
+                black_box(x[0].clone())
+            })
+        }
+
+        #[bench]
+        fn $fn_new(b: &mut Bencher) {
+            let mut x = (0usize..$n).map(&$mapper).collect::<Vec<_>>();
+            b.iter(|| {
+                for s in 0..x.len() {
+                    unsafe { ptr_rotate(x.len().wrapping_sub(s), x.as_mut_ptr().add(x.len().wrapping_sub(s)), s); }
+                }
+                black_box(x[0].clone())
+            })
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -293,200 +327,15 @@ mod benches {
     rotate_bench!(x1024s768_old, x1024s768_new, 1024, 768);
     rotate_bench!(x1024s992_old, x1024s992_new, 1024, 992);
 
-    #[bench]
-    fn usize_old(b: &mut Bencher) {
-        let mut x = black_box(setup(32));
-        b.iter(|| {
-            for i in 0..x.len() {
-                x[..].rotate_right(i);
-            }
-            x.clone()
-        })
-    }
 
-    #[bench]
-    fn usize_new(b: &mut Bencher) {
-        let mut x = black_box(setup(32));
-        b.iter(|| {
-            for i in 0..x.len() {
-                rotate_right(&mut x[..], i);
-            }
-            x.clone()
-        })
-    }
-
-    #[bench]
-    fn usize_32_old(b: &mut Bencher) {
-        let size = 32;
-        let mut v: Vec<[usize; 32]> = Vec::with_capacity(size);
-        for i in 0..size {
-            v.push([
-                i, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0,
-            ]);
-        }
-        b.iter(|| {
-            for s in 0..size {
-                v[..].rotate_right(s);
-            }
-            v.clone()
-        })
-    }
-
-    #[bench]
-    fn usize_32_new(b: &mut Bencher) {
-        let size = 32;
-        let mut v: Vec<[usize; 32]> = Vec::with_capacity(size);
-        for i in 0..size {
-            v.push([
-                i, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0,
-            ]);
-        }
-        b.iter(|| {
-            for s in 0..size {
-                unsafe {
-                    ptr_rotate(size - s, v[..].as_mut_ptr().add(size - s), s);
-                }
-            }
-            v.clone()
-        })
-    }
-
-    #[bench]
-    fn usize_33_old(b: &mut Bencher) {
-        let size = 32;
-        let mut v: Vec<[usize; 33]> = Vec::with_capacity(size);
-        for i in 0..size {
-            v.push([
-                i, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0,
-            ]);
-        }
-        b.iter(|| {
-            for s in 0..size {
-                v[..].rotate_right(s);
-            }
-            v.clone()
-        })
-    }
-
-    #[bench]
-    fn usize_33_new(b: &mut Bencher) {
-        let size = 32;
-        let mut v: Vec<[usize; 33]> = Vec::with_capacity(size);
-        for i in 0..size {
-            v.push([
-                i, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0,
-            ]);
-        }
-        b.iter(|| {
-            for s in 0..size {
-                unsafe {
-                    ptr_rotate(size - s, v[..].as_mut_ptr().add(size - s), s);
-                }
-            }
-            v.clone()
-        })
-    }
-
-    #[bench]
-    fn usize_4_old(b: &mut Bencher) {
-        let size = 32;
-        let mut v: Vec<[usize; 4]> = Vec::with_capacity(size);
-        for i in 0..size {
-            v.push([i, 0, 0, 0]);
-        }
-        b.iter(|| {
-            for s in 0..size {
-                v[..].rotate_right(s);
-            }
-            v.clone()
-        })
-    }
-
-    #[bench]
-    fn usize_4_new(b: &mut Bencher) {
-        let size = 32;
-        let mut v: Vec<[usize; 4]> = Vec::with_capacity(size);
-        for i in 0..size {
-            v.push([i, 0, 0, 0]);
-        }
-        b.iter(|| {
-            for s in 0..size {
-                unsafe {
-                    ptr_rotate(size - s, v[..].as_mut_ptr().add(size - s), s);
-                }
-            }
-            v.clone()
-        })
-    }
-
-    #[bench]
-    fn u8_old(b: &mut Bencher) {
-        let size = 32;
-        let mut v: Vec<u8> = Vec::with_capacity(size);
-        for i in 0..size {
-            v.push(i as u8);
-        }
-        b.iter(|| {
-            for s in 0..size {
-                v[..].rotate_right(s);
-            }
-            v.clone()
-        })
-    }
-
-    #[bench]
-    fn u8_new(b: &mut Bencher) {
-        let size = 32;
-        let mut v: Vec<u8> = Vec::with_capacity(size);
-        for i in 0..size {
-            v.push(i as u8);
-        }
-        b.iter(|| {
-            for s in 0..size {
-                unsafe {
-                    ptr_rotate(size - s, v[..].as_mut_ptr().add(size - s), s);
-                }
-            }
-            v.clone()
-        })
-    }
-
-    #[bench]
-    fn rgb_old(b: &mut Bencher) {
-        let size = 32;
-        let mut v: Vec<Rgb> = Vec::with_capacity(size);
-        for i in 0..size {
-            v.push(Rgb(i as u8, (i as u8).wrapping_add(7), (i as u8).wrapping_add(42)));
-        }
-        b.iter(|| {
-            for s in 0..size {
-                v[..].rotate_right(s);
-            }
-            v.clone()
-        })
-    }
-
-    #[bench]
-    fn rgb_new(b: &mut Bencher) {
-        let size = 32;
-        let mut v: Vec<Rgb> = Vec::with_capacity(size);
-        for i in 0..size {
-            v.push(Rgb(i as u8, (i as u8).wrapping_add(7), (i as u8).wrapping_add(42)));
-        }
-        b.iter(|| {
-            for s in 0..size {
-                unsafe {
-                    ptr_rotate(size - s, v[..].as_mut_ptr().add(size - s), s);
-                }
-            }
-            v.clone()
-        })
-    }
+    rotate!(rotate_u8_old, rotate_u8_new, 32, |i| i as u8);
+    rotate!(rotate_rgb_old, rotate_rgb_new, 32, |i| Rgb(i as u8, (i as u8).wrapping_add(7), (i as u8).wrapping_add(42)));
+    rotate!(rotate_usize_old, rotate_usize_new, 32, |i| i);
+    rotate!(rotate_usize_4_old, rotate_4_new, 32, |i| [i; 4]);
+    rotate!(rotate_usize_32_old, rotate_32_new, 32, |i| [i; 32]);
+    rotate!(rotate_usize_33_old, rotate_33_new, 32, |i| [i; 33]);
 }
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // below this point is a bunch of old alternative algorithms I made during the production of the
@@ -494,18 +343,6 @@ mod benches {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub fn main() {
-    for len in 0..513 {
-        for s in 0..len {
-            //dbg!(len, s);
-            let y = &mut setup(len)[..];
-            rotate_right(y, s);
-            //dbg!(&y);
-            check(y, s);
-        }
-    }
-    /*let y = &mut setup(2)[..];
-    rotate_right(y, 1);
-    check(y, 1);*/
 }
 /*
 //A rotate left function that assumes `(1 <= s < x.len()) && (2 <= x.len() < 16)`
