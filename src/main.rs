@@ -15,9 +15,9 @@ use test::{black_box, Bencher};
 ///
 /// # Algorithm
 ///
-/// Algorithm 1 is used for small values of `left + right`. The elements are moved into their final
-/// positions one at a time starting at `mid - left` and advancing by `right` steps modulo
-/// `left + right`, such that only one temporary is needed. Eventually, we arrive back at
+/// Algorithm 1 is used for small values of `left + right` or for large `T`. The elements are moved
+/// into their final positions one at a time starting at `mid - left` and advancing by `right` steps
+/// modulo `left + right`, such that only one temporary is needed. Eventually, we arrive back at
 /// `mid - left`. However, if `gcd(left + right, right)` is not 1, the above steps skipped over
 /// elements. For example:
 /// ```text
@@ -74,12 +74,12 @@ pub unsafe fn ptr_rotate<T>(mut left: usize, mut mid: *mut T, mut right: usize) 
         if (right == 0) || (left == 0) {
             return;
         }
-        if left + right < 24 {
+        if (left + right < 24) || (mem::size_of::<T>() > mem::size_of::<[usize; 4]>()) {
             // Algorithm 1
             // Microbenchmarks indicate that the average performance for random shifts is better all
             // the way until about `left + right == 32`, but the worst case performance breaks even
-            // around 16. 24 was chosen as middle ground.
-            // Additionally, algorithm 1 is still faster than the others when `T` is huge.
+            // around 16. 24 was chosen as middle ground. If the size of `T` is larger than 4
+            // `usize`s, this algorithm also outperforms other algorithms.
             let x = mid.sub(left);
             // beginning of first round
             let mut tmp: T = x.read();
@@ -90,7 +90,7 @@ pub unsafe fn ptr_rotate<T>(mut left: usize, mut mid: *mut T, mut right: usize) 
             let mut gcd = right;
             // benchmarks reveal that it is faster to swap temporaries all the way through instead
             // of reading one temporary once, copying backwards, and then writing that temporary at
-            // the very end. This is probably due to the fact that swapping or replacing temporaries
+            // the very end. This is possibly due to the fact that swapping or replacing temporaries
             // uses only one memory address in the loop instead of needing to manage two.
             loop {
                 tmp = x.add(i).replace(tmp);
@@ -130,10 +130,11 @@ pub unsafe fn ptr_rotate<T>(mut left: usize, mut mid: *mut T, mut right: usize) 
                 }
             }
             return;
-            // `T` is not a zero-sized type, so it's okay to divide by its size.
+        // `T` is not a zero-sized type, so it's okay to divide by its size.
         } else if cmp::min(left, right) <= mem::size_of::<BufType>() / mem::size_of::<T>() {
             // Algorithm 2
-            let mut rawarray = MaybeUninit::<BufType>::uninit();
+            // The `[T; 0]` here is to ensure this is appropriately aligned for T
+            let mut rawarray = MaybeUninit::<(BufType, [T; 0])>::uninit();
             let buf = rawarray.as_mut_ptr() as *mut T;
             let dim = mid.sub(left).add(right);
             if left <= right {
@@ -327,15 +328,14 @@ mod benches {
     rotate_bench!(x1024s768_old, x1024s768_new, 1024, 768);
     rotate_bench!(x1024s992_old, x1024s992_new, 1024, 992);
 
-
     rotate!(rotate_u8_old, rotate_u8_new, 32, |i| i as u8);
     rotate!(rotate_rgb_old, rotate_rgb_new, 32, |i| Rgb(i as u8, (i as u8).wrapping_add(7), (i as u8).wrapping_add(42)));
     rotate!(rotate_usize_old, rotate_usize_new, 32, |i| i);
-    rotate!(rotate_usize_4_old, rotate_4_new, 32, |i| [i; 4]);
-    rotate!(rotate_usize_32_old, rotate_32_new, 32, |i| [i; 32]);
-    rotate!(rotate_usize_33_old, rotate_33_new, 32, |i| [i; 33]);
+    rotate!(rotate_16_usize_4_old, rotate_16_usize_4_new, 16, |i| [i; 4]);
+    rotate!(rotate_16_usize_5_old, rotate_16_usize_5_new, 16, |i| [i; 5]);
+    rotate!(rotate_64_usize_4_old, rotate_64_usize_4_new, 64, |i| [i; 4]);
+    rotate!(rotate_64_usize_5_old, rotate_64_usize_5_new, 64, |i| [i; 5]);
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // below this point is a bunch of old alternative algorithms I made during the production of the
